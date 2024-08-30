@@ -226,6 +226,45 @@ def crowding_distance(fitnesses, front):
             distance[sorted_front[j]] += (fitnesses[sorted_front[j + 1]][i] - fitnesses[sorted_front[j - 1]][i]) / (max(fitnesses, key=lambda x: x[i])[i] - min(fitnesses, key=lambda x: x[i])[i])
     return distance
 
+# Tournament selection
+def tournament_selection(population, fronts, distance_populations, k=2):
+    selected_parents = []
+    while len(selected_parents) < k:
+        select1, select2  = random.sample(range(len(population)), k)
+        select1_rank = get_individual_rank(select1,fronts)  # Get the rank of the (select1) individual
+        select2_rank = get_individual_rank(select2,fronts)  # Get the rank of the (select2) individual
+
+        # First: Compare rank of the selected individuals.
+        if select1_rank < select2_rank:  # If select1 has lower rank than select2, then select1 is better
+            selected_parents.append(select1)
+        elif select1_rank > select2_rank: # If select2 has lower rank than select1, then select2 is better
+            selected_parents.append(select2)
+
+        # Second: Compare Crowding Distance, If the two selected are in the same front, compare their crowding distances
+        elif select1_rank == select2_rank:
+            if distance_populations[select1] > distance_populations[select2]:
+                selected_parents.append(select1)
+            else:
+                selected_parents.append(select2)
+
+    return selected_parents[0], selected_parents[1]
+
+# Crossover
+def crossover(parent1, parent2, CROSSOVER_RATE):
+    if random.random() < CROSSOVER_RATE:
+        point = random.randint(1, len(parent1) - 1)
+        child1 = parent1[:point] + parent2[point:]
+        child2 = parent2
+        return child1, child2
+    return parent1, parent2
+
+# Mutation
+def mutation(individual, MUTATION_RATE):
+    if random.random() < MUTATION_RATE:
+        index = random.randint(0, len(individual) - 1)
+        individual[index] = 1 - individual[index]
+    return individual
+
 def main():
     # Parameters
     POPULATION_SIZE = 50
@@ -240,6 +279,8 @@ def main():
     column_file = ['clean1.names']  # wbcd.names , sonar.names
     
     for idx, datafile_ in enumerate(data_file):
+        print('-----------------------------------------------------------------')
+        print('Datafile: ', datafile_)
         # Load dataset 
         dataset = load_data(column_file[idx], datafile_)
         Feature = dataset.iloc[:, :-2]
@@ -253,7 +294,7 @@ def main():
             population = initialize_population(POPULATION_SIZE, fs_datset.shape[1], SEED_VAL[run])
             
             for _ in range(GENERATIONS):
-                print('Generation:', _)
+                print('Running Generation:', _)
                 # Fitness evaluation
                 #fitnesses = [evaluate_individual(individual, ) for individual in population]
                 fitnesses = [fitness_func(individual, fs_datset, Target.values) for individual in population]
@@ -267,6 +308,51 @@ def main():
                     distances = crowding_distance(fitnesses, front)
                     sorted_front = sorted(front, key=lambda x: distances[x] if x in distances else float('inf'))
                     distance_populations.extend(sorted_front)
+                
+                # Apply Elisim: Keep 
+
+                # Apply Genetic Operation
+                offspring = []
+                while len(offspring) < POPULATION_SIZE:
+                    parent1_idx, parent2_idx = tournament_selection(population, fronts, distance_populations,TURNAMENT_K)
+                    child1, child2 = crossover(population[parent1_idx], population[parent2_idx], CROSSOVER_RATE)
+                    child1 = mutation(child1, MUTATION_RATE)
+                    child2 = mutation(child2, MUTATION_RATE)
+                    offspring.append(child1)
+                    offspring.append(child2)
+                
+
+                # Combine new population(offspring) with old population
+                combine_population = population + offspring
+                combine_population_fitness = fitnesses + [fitness_func(individual, fs_datset, Target.values) for individual in offspring]
+                
+                # Combine fronts and distance
+                combine_fronts = non_dominated_sorting(combine_population, combine_population_fitness)
+                combine_distance = []
+                for front in combine_fronts:
+                    distances = crowding_distance(combine_population_fitness, front)
+                    sorted_front = sorted(front, key=lambda x: distances[x] if x in distances else float('inf'))
+                    combine_distance.extend(sorted_front)
+
+
+                # for loop for each front. and add individual to next generation population up to reach POPULATION_SIZE
+                new_population = []
+                for front in combine_fronts:
+                    # check if population size is less than POPULATION_SIZE, then add all individual of front to next generation (new_population)
+                    if len(front) + len(new_population) <= POPULATION_SIZE:
+                        # Add all individual of front to new_population
+                        [new_population.append(combine_population[ind]) for ind in front]
+                    else:
+                        # Check how many individual can be added to next generation
+                        remaining = POPULATION_SIZE - len(new_population)
+                        
+                        # Sort front based on crowding distance, then add remaining individual to next generation
+                        front_distance_sort = sorted(front, key=lambda x: combine_distance[x], reverse=True)
+                        [new_population.extend(combine_population[ind]) for ind in front_distance_sort[:remaining]]
+                        
+                        break
+
+                # Apply Stoping Crieteria. 
 
 if __name__ == "__main__":
     main()
