@@ -125,10 +125,106 @@ def fitness_func(individual, dataset, target):
     
     return round(erro_rate, 4), feature_selected_ratio
 
+def get_individual_rank(individual, fronts):
+    """
+    Get the rank of a particular individual from the fronts.
+    
+    Parameters:
+    individual: The individual whose rank is to be found.
+    fronts: List of fronts where each front is a list of individuals.
+    
+    Returns:
+    The rank (index) of the front where the individual is found, or None if not found.
+    """
+    for rank, front in enumerate(fronts):
+        if individual in front:
+            return rank
+    return None
+
 # Initialize population
 def initialize_population(size, n_features, seed_val):
     np.random.seed(seed_val)
     return [np.random.randint(0, 2, n_features).tolist() for _ in range(size)]
+
+# Evaluate individual
+def evaluate_individual(individual, dataset):
+
+    # Divide dataset into features and target
+    X = dataset.iloc[:, :-1].values
+    y = dataset.iloc[:, -1].values
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+    
+    # Select features based on individual
+    selected_features = [i for i, bit in enumerate(individual) if bit == 1]
+    if len(selected_features) == 0:
+        return 1.0, len(individual)  # Penalize individuals that select no features
+    
+    clf = KNeighborsClassifier()
+    clf.fit(X_train[:, selected_features], y_train)
+    predictions = clf.predict(X_test[:, selected_features])
+    accuracy = accuracy_score(y_test, predictions)
+    error = 1 - accuracy
+
+    return error, len(selected_features)
+
+# Non-dominated sorting
+def non_dominated_sorting(population, fitnesses):
+    # Hnadle case when population is empty
+    if not population:
+        return []
+    
+    # Initialization
+    S = [[] for _ in range(len(population))]
+    front = [[]]    # A list of lists of individuals in each front
+    n = [0] * len(population)    # A list where n[p] is the number of solutions dominating p
+    rank = [0] * len(population)  # A list where rank[p] is the rank (or front number) of individual p
+
+    # Dominance Comparison
+    for p in range(len(population)): # Loop for each individual in population
+        for q in range(len(population)):
+            if dominates(fitnesses[p], fitnesses[q]): # Check if p dominates q
+                S[p].append(q)
+            elif dominates(fitnesses[q], fitnesses[p]): # Check if q dominates p
+                n[p] += 1 
+        if n[p] == 0:  # if True, then p belongs to the first front
+            rank[p] = 0 
+            front[0].append(p) 
+
+    # Constructing the subsequent fronts
+    i = 0
+    while front[i]: 
+        Q = []  # A list to store the individuals for the next front
+        for p in front[i]: # Loop for each individual in the current front
+            for q in S[p]:
+                n[q] -= 1
+                if n[q] == 0: # if True, then q belongs to the next front
+                    rank[q] = i + 1 
+                    Q.append(q)
+        i += 1
+        front.append(Q)
+
+    del front[-1]  # Remove the last empty front
+    return front
+
+# Domination check
+def dominates(fitness1, fitness2): 
+    return all(x <= y for x, y in zip(fitness1, fitness2)) and any(x < y for x, y in zip(fitness1, fitness2))
+
+# Crowding distance
+def crowding_distance(fitnesses, front):
+    distance = [0] * len(front)
+    for i in range(len(fitnesses[0])):
+        sorted_front = sorted(range(len(front)), key=lambda x: fitnesses[front[x]][i])
+
+        if len(sorted_front) < 2: continue
+
+        # Infinite distance for boundary individuals
+        distance[sorted_front[0]] = distance[sorted_front[-1]] = float('inf')  # sorted_front[0]: This refers to the first element in the sorted front
+
+        for j in range(1, len(sorted_front) - 1):
+            distance[sorted_front[j]] += (fitnesses[sorted_front[j + 1]][i] - fitnesses[sorted_front[j - 1]][i]) / (max(fitnesses, key=lambda x: x[i])[i] - min(fitnesses, key=lambda x: x[i])[i])
+    return distance
 
 def main():
     # Parameters
@@ -155,6 +251,22 @@ def main():
             fs_datset = dataset[:][list(fs.array)]
             # Evolutionary algorithm
             population = initialize_population(POPULATION_SIZE, fs_datset.shape[1], SEED_VAL[run])
-            #
+            
+            for _ in range(GENERATIONS):
+                print('Generation:', _)
+                # Fitness evaluation
+                #fitnesses = [evaluate_individual(individual, ) for individual in population]
+                fitnesses = [fitness_func(individual, fs_datset, Target.values) for individual in population]
+
+                # NON-DOMINANCE SORTING 
+                fronts = non_dominated_sorting(population, fitnesses)
+
+                # CROWDING DISTANCE: calcualte crowding distance. then sort individual based on distance for each front
+                distance_populations = []
+                for front in fronts:
+                    distances = crowding_distance(fitnesses, front)
+                    sorted_front = sorted(front, key=lambda x: distances[x] if x in distances else float('inf'))
+                    distance_populations.extend(sorted_front)
+
 if __name__ == "__main__":
     main()
