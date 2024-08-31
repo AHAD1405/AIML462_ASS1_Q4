@@ -9,10 +9,16 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.feature_selection import RFECV
 from sklearn.model_selection import StratifiedKFold
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import MinMaxScaler
 import os
 import warnings
+import matplotlib.pyplot as plt
+from pymoo.indicators.hv import HV
 
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", message="Increase the number of iterations (max_iter) or scale the data as shown in:")
+warnings.filterwarnings("ignore", message=".*STOP: TOTAL NO. of ITERATIONS REACHED LIMIT.*")
+
 
 # load dataset 
 def load_data(column_file_name, data_file_name):
@@ -75,7 +81,7 @@ def WrapperGA(X, y):
     """
 
     #min_features_to_select = 1  # Minimum number of features to consider
-    clf = LogisticRegression()
+    clf = LogisticRegression(max_iter=1000)  # Estimator
     cv = StratifiedKFold(5)
 
     rfecv = RFECV(
@@ -123,7 +129,7 @@ def fitness_func(individual, dataset, target):
     feature_selected_ratio = len(selected_features) / all_feature
     #accuracy = accuracy_score(y_test, predictions) # Accuracy
     
-    return round(erro_rate, 4), feature_selected_ratio
+    return round(erro_rate, 4), round(feature_selected_ratio,4)
 
 def get_individual_rank(individual, fronts):
     """
@@ -265,10 +271,76 @@ def mutation(individual, MUTATION_RATE):
         individual[index] = 1 - individual[index]
     return individual
 
+# Assuming fitness_func returns a list of objective values
+def calculate_hypervolume(front_fitnesses):
+    """
+    Calculate the hyper-volume for a given front.
+    
+    Parameters:
+    front: List of individuals in the front.
+    reference_point: Reference point for hyper-volume calculation.
+    
+    Returns:
+    Hyper-volume value.
+    """
+    # Normalize the fitness values
+    scaler = MinMaxScaler()
+    front_fitnesses_normalized = scaler.fit_transform(front_fitnesses)
+
+    # Create the reference point (should be worse than any point in the front)
+    reference_point = [1.1] * len(front_fitnesses[0])
+
+    # Calculate the hyper-volume
+    hv = HV(reference_point)
+    hypervolume_value = hv.do(front_fitnesses_normalized)
+    return hypervolume_value
+
+def plot_hypervolume(hypervolumes):
+    """
+    Plot the hypervolume over iterations.
+    
+    Parameters:
+    hypervolumes: List of hypervolume values for each iteration.
+    """
+    plt.figure(figsize=(10, 6))
+    plt.plot(hypervolumes, marker='o', linestyle='-', color='b')
+    plt.title('Hyper-volume Over Iterations')
+    plt.xlabel('Iteration')
+    plt.ylabel('Hyper-volume')
+    plt.grid(True)
+    plt.show()
+
+def create_table(hyper_volume, mean_, std_):
+    """
+    Create a dataset with two columns from two input lists.
+
+    Returns:
+        pandas.DataFrame: A pandas DataFrame containing the two columns.
+    """
+
+    # First column
+    first_column = ['Run 1','Run 2','Run 3']
+
+    # Create a dictionary with the two lists as values
+    data = {'': first_column, 'Hyper Volume': hyper_volume}
+
+    # Create a pandas DataFrame from the dictionary
+    data_table = pd.DataFrame(data)
+
+    # Create a new DataFrame with the mean and concatenate it with (data_table)
+    mean_row = pd.DataFrame({'': ['Mean'], 'Hyper Volume': [mean_]})
+    data_table = pd.concat([data_table, mean_row], ignore_index=True)
+
+    # Create a new DataFrame with the stander deviation and concatenate it with (data_table)
+    std_row = pd.DataFrame({'': ['STD'], 'Hyper Volume': [std_] })
+    data_table = pd.concat([data_table, std_row], ignore_index=True)
+
+    return data_table
+
 def main():
     # Parameters
     POPULATION_SIZE = 50
-    GENERATIONS = 100
+    GENERATIONS = 5
     MUTATION_RATE = 0.1
     CROSSOVER_RATE = 0.9
     RUNs = 3 
@@ -279,6 +351,7 @@ def main():
     column_file = ['clean1.names']  # wbcd.names , sonar.names
     
     for idx, datafile_ in enumerate(data_file):
+        hyper_volumes = []
         print('-----------------------------------------------------------------')
         print('Datafile: ', datafile_)
         # Load dataset 
@@ -345,14 +418,44 @@ def main():
                     else:
                         # Check how many individual can be added to next generation
                         remaining = POPULATION_SIZE - len(new_population)
-                        
+                        if remaining == 0:  # If no individual can be added to next generation, then go to next generation
+                            population = new_population
+                            break
                         # Sort front based on crowding distance, then add remaining individual to next generation
                         front_distance_sort = sorted(front, key=lambda x: combine_distance[x], reverse=True)
-                        [new_population.extend(combine_population[ind]) for ind in front_distance_sort[:remaining]]
+                        [new_population.append(combine_population[ind]) for ind in front_distance_sort[:remaining]]
                         
+                        population = new_population
                         break
 
                 # Apply Stoping Crieteria. 
+
+            # HYPER-VOLUME CALCULATION
+            # Clculate non-dominance sorting for final population
+            new_population_fitness = [fitness_func(ind, fs_datset, Target.values) for ind in population]
+            new_population_fronts = non_dominated_sorting(population, new_population_fitness)
+            
+            # Extract the first front (front 0 and its fitness from the new_population
+            pareto_front = [population[ind] for ind in new_population_fronts[0]]
+            pareto_front_fitness = [new_population_fitness[ind] for ind in new_population_fronts[0]]
+
+            # Define a reference point for hyper-volume calculation (should be worse than any point in the pareto front)
+            #reference_point = [max(fitness) + 1 for fitness in zip(*[fitness_func(ind, fs_datset, Target.values) for ind in pareto_front])]
+            #reference_point = [max(fitness) + 1 for fitness in zip(*[fitness_func(ind, fs_datset, Target.values) for ind in new_population])]
+
+            # HYPER-VOLUME: Calculate the hyper-volume for front 0, then plot the hypervolume over iterations
+            hyper_vol = calculate_hypervolume(pareto_front_fitness)
+            hyper_volumes.append(hyper_vol)
+            plot_hypervolume(hyper_vol)
+        
+        # Calculate the mean and standard deviation of the hyper-volume values
+        mean_hyper_volume = np.mean(hyper_volumes)
+        std_hyper_volume = np.std(hyper_volumes)
+        
+        # Create a table with the hyper-volume values, mean, and standard deviation
+        data_table = create_table(hyper_volumes, mean_hyper_volume, std_hyper_volume)
+        print(data_table)
+
 
 if __name__ == "__main__":
     main()
