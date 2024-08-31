@@ -295,18 +295,23 @@ def calculate_hypervolume(front_fitnesses):
     hypervolume_value = hv.do(front_fitnesses_normalized)
     return hypervolume_value
 
-def plot_hypervolume(hypervolumes):
+
+# Function to plot Pareto front fitness values
+def plot_pareto_front_fitness(pareto_front_fitness):
     """
-    Plot the hypervolume over iterations.
+    Plot the Pareto front fitness values.
     
     Parameters:
-    hypervolumes: List of hypervolume values for each iteration.
+    pareto_front_fitness: List of fitness values for the Pareto front.
     """
-    plt.figure(figsize=(10, 6))
-    plt.plot(hypervolumes, marker='o', linestyle='-', color='b')
-    plt.title('Hyper-volume Over Iterations')
-    plt.xlabel('Iteration')
-    plt.ylabel('Hyper-volume')
+    pareto_front_fitness = np.array(pareto_front_fitness)
+    
+    # two objectives, create a 2D scatter plot
+    plt.scatter(pareto_front_fitness[:, 0], pareto_front_fitness[:, 1], color='b', marker='o')
+    plt.title('Pareto Front Fitness Values')
+    plt.xlabel('Obj1: Error Rate')
+    plt.ylabel('Obj2: Feature Selected Ratio')
+
     plt.grid(True)
     plt.show()
 
@@ -437,17 +442,17 @@ def main():
             
             # Extract the first front (front 0 and its fitness from the new_population
             pareto_front = [population[ind] for ind in new_population_fronts[0]]
-            pareto_front_fitness = [new_population_fitness[ind] for ind in new_population_fronts[0]]
-
-            # Define a reference point for hyper-volume calculation (should be worse than any point in the pareto front)
-            #reference_point = [max(fitness) + 1 for fitness in zip(*[fitness_func(ind, fs_datset, Target.values) for ind in pareto_front])]
-            #reference_point = [max(fitness) + 1 for fitness in zip(*[fitness_func(ind, fs_datset, Target.values) for ind in new_population])]
+            pareto_front_fitness = [new_population_fitness[ind] for ind in pareto_front[0]]
 
             # HYPER-VOLUME: Calculate the hyper-volume for front 0, then plot the hypervolume over iterations
             hyper_vol = calculate_hypervolume(pareto_front_fitness)
             hyper_volumes.append(hyper_vol)
-            plot_hypervolume(hyper_vol)
-        
+            print('Hyper Volume:', round(hyper_vol, 4))
+
+            # Plot the Pareto front fitness values
+            plot_pareto_front_fitness(pareto_front_fitness)
+            print('-----------------------------------------------------------------')
+
         # Calculate the mean and standard deviation of the hyper-volume values
         mean_hyper_volume = np.mean(hyper_volumes)
         std_hyper_volume = np.std(hyper_volumes)
