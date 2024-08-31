@@ -16,7 +16,9 @@ import matplotlib.pyplot as plt
 from pymoo.indicators.hv import HV
 import matplotlib
 
-matplotlib.use('Agg')  # Use a non-interactive backend
+#matplotlib.use('Agg')  # Use a non-interactive backend
+matplotlib.use('TkAgg')  # Use a non-interactive backend
+warnings.filterwarnings("ignore", category=pd.errors.PerformanceWarning)  # Suppress specific warnings
 
 # load dataset 
 def load_data(column_file_name, data_file_name):
@@ -116,7 +118,7 @@ def WrapperGA(X, y):
     
     return selected_features
 
-def fitness_func(individual, dataset, target):
+def fitness_func(individual, dataset, target, seed_val=42):
     
     all_feature = dataset.shape[1]
 
@@ -125,11 +127,15 @@ def fitness_func(individual, dataset, target):
         return 0
     
     X_selected = dataset.iloc[:, selected_features]
-    X_train, X_test, y_train, y_test = train_test_split(X_selected, target, test_size=0.3, random_state=42)
+    
+    # Normalizae the dataset
+    X_selected_normalized = data_normaliz(X_selected)
+
+    X_train, X_test, y_train, y_test = train_test_split(X_selected_normalized, target, test_size=0.3, random_state=seed_val)
     
     clf = RandomForestClassifier(n_estimators=50)
     clf.fit(X_train, y_train)
-    predictions = clf.predict(X_selected)
+    predictions = clf.predict(X_selected_normalized)
     
     # Objective 1: Error rate
     correct_predictions = sum(predictions != target)  # Number of correct predictions
@@ -307,7 +313,7 @@ def calculate_hypervolume(front_fitnesses):
 
 
 # Function to plot Pareto front fitness values
-def plot_pareto_front_fitness(pareto_front_fitness):
+def plot_pareto_front_fitness(pareto_front_fitness, run_no):
     """
     Plot the Pareto front fitness values.
     
@@ -318,7 +324,7 @@ def plot_pareto_front_fitness(pareto_front_fitness):
     
     # two objectives, create a 2D scatter plot
     plt.scatter(pareto_front_fitness[:, 0], pareto_front_fitness[:, 1], color='b', marker='o')
-    plt.title('Pareto Front Fitness Values')
+    plt.title(f'Pareto Front Fitness Values for run ({run_no})')
     plt.xlabel('Obj1: Error Rate')
     plt.ylabel('Obj2: Feature Selected Ratio')
 
@@ -385,7 +391,7 @@ def main():
                 print(f'\tGeneration {_} is running ...')
                 # Fitness evaluation
                 #fitnesses = [evaluate_individual(individual, ) for individual in population]
-                fitnesses = [fitness_func(individual, fs_datset, Target.values) for individual in population]
+                fitnesses = [fitness_func(individual, fs_datset, Target.values, SEED_VAL[run]) for individual in population]
 
                 # NON-DOMINANCE SORTING 
                 fronts = non_dominated_sorting(population, fitnesses)
@@ -412,7 +418,7 @@ def main():
 
                 # Combine new population(offspring) with old population
                 combine_population = population + offspring
-                combine_population_fitness = fitnesses + [fitness_func(individual, fs_datset, Target.values) for individual in offspring]
+                combine_population_fitness = fitnesses + [fitness_func(individual, fs_datset, Target.values, SEED_VAL[run]) for individual in offspring]
                 
                 # Combine fronts and distance
                 combine_fronts = non_dominated_sorting(combine_population, combine_population_fitness)
@@ -447,12 +453,13 @@ def main():
 
             # HYPER-VOLUME CALCULATION
             # Clculate non-dominance sorting for final population
-            new_population_fitness = [fitness_func(ind, fs_datset, Target.values) for ind in population]
+            new_population_fitness = [fitness_func(ind, fs_datset, Target.values, SEED_VAL[run]) for ind in population]
             new_population_fronts = non_dominated_sorting(population, new_population_fitness)
             
             # Extract the first front (front 0 and its fitness from the new_population
-            pareto_front = [population[ind] for ind in new_population_fronts[0]]
-            pareto_front_fitness = [new_population_fitness[ind] for ind in pareto_front[0]]
+            #pareto_front = [population[ind] for ind in new_population_fronts[0]]
+            pareto_front_fitness = [new_population_fitness[ind] for ind in new_population_fronts[0]]
+            print('Pareto Front (index of population):', new_population_fronts[0])
 
             # HYPER-VOLUME: Calculate the hyper-volume for front 0, then plot the hypervolume over iterations
             hyper_vol = calculate_hypervolume(pareto_front_fitness)
@@ -460,7 +467,7 @@ def main():
             print('Hyper Volume:', round(hyper_vol, 4))
 
             # Plot the Pareto front fitness values
-            plot_pareto_front_fitness(pareto_front_fitness)
+            plot_pareto_front_fitness(pareto_front_fitness, run)
             print('-----------------------------------------------------------------')
 
         # Calculate the mean and standard deviation of the hyper-volume values
