@@ -33,38 +33,56 @@ def load_data(column_file_name, data_file_name):
 
     columns_name = []
 
-    # Reading Column names from file
-    with open(columns_file,'r') as file_: 
-        columns = file_.readlines()
-        for idx, line in enumerate(columns): # extract values
-            if idx == 0: 
-                columns_name.append('target_')   # add column for target column
-                continue
-            x = line.split()
-            columns_name.append(x[0])
-            #column_data.append(x[1])
+    if data_file_name == 'clean1.data':
+        # Reading Column names from file
+        with open(columns_file,'r') as file_: 
+            columns = file_.readlines()
+            for idx, line in enumerate(columns): # extract values
+                if idx == 0: 
+                    columns_name.append('target_')   # add column for target column
+                    continue
+                x = line.split()
+                columns_name.append(x[0])
+                #column_data.append(x[1])
 
-    # Reading dataset from file
-    with open(data_file,'r') as data_: 
-        data = data_.readlines()
-        dataset = pd.DataFrame(columns=columns_name)
-        for line in data:
-            x = line.split(',')
-            dataset.loc[len(dataset)] = x
+        # Reading dataset from file
+        with open(data_file,'r') as data_: 
+            data = data_.readlines()
+            dataset = pd.DataFrame(columns=columns_name)
+            for line in data:
+                x = line.split(',')
+                dataset.loc[len(dataset)] = x
 
-    # EDA: format Target feature and class feature
-    dataset['target'] = [row[0:4] if row[0:4] == 'MUSK' else row[0:8] for row in dataset['target_'].str.strip()]
+        # EDA: format Target feature and class feature
+        dataset['target'] = [row[0:4] if row[0:4] == 'MUSK' else row[0:8] for row in dataset['target_'].str.strip()]
 
-    # Convert Target columns to numeric
-    dataset['class'] = [1 if row[0:4] == 'MUSK' else 0 for row in dataset['target_'].str.strip()]
+        # Convert Target columns to numeric
+        dataset['class'] = [1 if row[0:4] == 'MUSK' else 0 for row in dataset['target_'].str.strip()]
+        
+        # Drop unnrelevent columns
+        dataset = dataset.drop(columns=['target_'])
+        dataset = dataset.drop(columns=['f166:'])
+        dataset = dataset.drop(columns=['molecule_name:'])
+        dataset = dataset.drop(columns=['conformation_name:'])
+        return dataset
     
-    # Drop unnrelevent columns
-    dataset = dataset.drop(columns=['target_'])
-    dataset = dataset.drop(columns=['f166:'])
-    dataset = dataset.drop(columns=['molecule_name:'])
-    dataset = dataset.drop(columns=['conformation_name:'])
-
-    return dataset
+    elif data_file_name == 'vehicle.dat': 
+        columns_name = ['COMPACTNESS', 'CIRCULARITY', 'DISTANCE CIRCULARITY', 'RADIUS RATIO', 'PR.AXIS ASPECT RATIO', 
+                        'MAX.LENGTH ASPECT RATIO', 'SCATTER RATIO', 'ELONGATEDNESS', 'PR.AXIS RECTANGULARITY', 'MAX.LENGTH RECTANGULARITY', 
+                        'SCALED VARIANCE ALONG MAJOR AXIS','SCALED VARIANCE ALONG MINOR AXIS', 'SCALED RADIUS OF GYRATION', 'SKEWNESS ABOUT MAJOR AXIS', 
+                        'SKEWNESS ABOUT MINOR AXIS', 'KURTOSIS ABOUT MINOR AXIS', 'KURTOSIS ABOUT MAJOR AXIS', 'HOLLOWS RATIO', 'target']
+        
+        # Reading Column names from file
+        with open(data_file,'r') as data_: 
+            data = data_.readlines()
+            dataset = pd.DataFrame(columns=columns_name)
+            for line in data:
+                x = line.split()
+                dataset.loc[len(dataset)] = x
+                
+        dataset['class'] = [0 if row == 'opel' else 1 if row == 'saab' else 2 if row == 'van' else 3 for row in dataset['target']]
+        dataset = dataset.drop(columns=['target'])
+        return dataset
 
 def data_normaliz(dataset):
     """
@@ -133,7 +151,7 @@ def fitness_func(individual, dataset, target, seed_val=42):
 
     X_train, X_test, y_train, y_test = train_test_split(X_selected_normalized, target, test_size=0.3, random_state=seed_val)
     
-    clf = RandomForestClassifier(n_estimators=50)
+    clf = RandomForestClassifier(n_estimators=50, random_state=seed_val)
     clf.fit(X_train, y_train)
     predictions = clf.predict(X_selected_normalized)
     
@@ -311,7 +329,6 @@ def calculate_hypervolume(front_fitnesses):
     hypervolume_value = hv.do(front_fitnesses_normalized)
     return hypervolume_value
 
-
 # Function to plot Pareto front fitness values
 def plot_pareto_front_fitness(pareto_front_fitness, run_no):
     """
@@ -368,7 +385,7 @@ def main():
     SEED_VAL = [20, 40, 60]
     TURNAMENT_K = 2
     
-    data_file =  ['clean1.data']    # wbcd.data  , sonar.data
+    data_file =  ['vehicle.dat','clean1.data']    # wbcd.data  , sonar.data
     column_file = ['clean1.names']  # wbcd.names , sonar.names
     
     for idx, datafile_ in enumerate(data_file):
@@ -376,7 +393,7 @@ def main():
         print('-----------------------------------------------------------------')
         print('Datafile: ', datafile_)
         # Load dataset 
-        dataset = load_data(column_file[idx], datafile_)
+        dataset = load_data(column_file[0], datafile_)
         Feature = dataset.iloc[:, :-2]
         Target = dataset.iloc[:, -1]
 
