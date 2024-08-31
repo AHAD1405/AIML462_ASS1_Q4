@@ -14,11 +14,9 @@ import os
 import warnings
 import matplotlib.pyplot as plt
 from pymoo.indicators.hv import HV
+import matplotlib
 
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", message="Increase the number of iterations (max_iter) or scale the data as shown in:")
-warnings.filterwarnings("ignore", message=".*STOP: TOTAL NO. of ITERATIONS REACHED LIMIT.*")
-
+matplotlib.use('Agg')  # Use a non-interactive backend
 
 # load dataset 
 def load_data(column_file_name, data_file_name):
@@ -66,6 +64,15 @@ def load_data(column_file_name, data_file_name):
 
     return dataset
 
+def data_normaliz(dataset):
+    """
+        Normalize the dataset
+    """
+    # Normalize the dataset
+    scaler = MinMaxScaler()
+    dataset_normlized = scaler.fit_transform(dataset)
+    return dataset_normlized
+
 def WrapperGA(X, y):
     """
         -  In wrapper methods, we try to use a subset of features and train a model using them. Based on the inferences that we draw from the previous model, 
@@ -80,7 +87,10 @@ def WrapperGA(X, y):
         -  
     """
 
-    #min_features_to_select = 1  # Minimum number of features to consider
+    # Normalize the dataset
+    X_normalized = data_normaliz(X)
+
+
     clf = LogisticRegression(max_iter=1000)  # Estimator
     cv = StratifiedKFold(5)
 
@@ -92,8 +102,8 @@ def WrapperGA(X, y):
         #min_features_to_select=min_features_to_select,
         n_jobs=2,
     )
-    rfecv.fit(X, y)
-    predictions = rfecv.predict(X)  # Predictions of the best subset of features
+    rfecv.fit(X_normalized, y)
+    #predictions = rfecv.predict(X_normalized)  # Predictions of the best subset of features
 
     #correct_predictions = sum(predictions == y)  # Number of correct predictions
     #error_rate = 1 - correct_predictions / len(y)  # Error rate
@@ -372,7 +382,7 @@ def main():
             population = initialize_population(POPULATION_SIZE, fs_datset.shape[1], SEED_VAL[run])
             
             for _ in range(GENERATIONS):
-                print('Running Generation:', _)
+                print(f'\tGeneration {_} is running ...')
                 # Fitness evaluation
                 #fitnesses = [evaluate_individual(individual, ) for individual in population]
                 fitnesses = [fitness_func(individual, fs_datset, Target.values) for individual in population]
