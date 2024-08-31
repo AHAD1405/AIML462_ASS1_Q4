@@ -375,6 +375,11 @@ def create_table(hyper_volume, mean_, std_):
 
     return data_table
 
+def all_feature_classifier(feature_ds, target_ds, seed_val):
+    population = [[1 for _ in range(feature_ds.shape[1])] for _ in range(1)]
+    fitnesses = [fitness_func(individual, feature_ds, target_ds, seed_val) for individual in population]
+    return fitnesses
+
 def main():
     # Parameters
     POPULATION_SIZE = 50
@@ -385,7 +390,7 @@ def main():
     SEED_VAL = [20, 40, 60]
     TURNAMENT_K = 2
     
-    data_file =  ['vehicle.dat','clean1.data']    # wbcd.data  , sonar.data
+    data_file =  ['clean1.data', 'vehicle.dat']    # wbcd.data  , sonar.data
     column_file = ['clean1.names']  # wbcd.names , sonar.names
     
     for idx, datafile_ in enumerate(data_file):
@@ -477,6 +482,11 @@ def main():
             #pareto_front = [population[ind] for ind in new_population_fronts[0]]
             pareto_front_fitness = [new_population_fitness[ind] for ind in new_population_fronts[0]]
             print('Pareto Front (index of population):', new_population_fronts[0])
+            print('Pareto Front Fitness:', pareto_front_fitness)
+
+            # classifier useing entire dataset
+            all_feature_fitness = all_feature_classifier(Feature, Target, SEED_VAL[run])
+            print('All Feature Fitness:', all_feature_fitness)
 
             # HYPER-VOLUME: Calculate the hyper-volume for front 0, then plot the hypervolume over iterations
             hyper_vol = calculate_hypervolume(pareto_front_fitness)
